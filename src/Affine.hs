@@ -1,12 +1,9 @@
 module Main where
 
-import Data.Word
-import System.Environment (getArgs)
+import System.Environment
+import System.Exit
 import qualified Data.ByteString.Lazy as B
 import qualified Data.ByteString.Lazy.Char8 as C
-
-usage :: String
-usage = "usage: affine (encrypt|decrypt|decipher) infile outfile (a b|dictfile)"
 
 tfst :: (a, b, c) -> a
 tfst (x, _, _) = x
@@ -29,24 +26,35 @@ decrypt ciphertext a b =
     where a' = fromIntegral $ tsnd (egcd a 128)
           b' = fromIntegral b
 
+-- decipher :: B.ByteString -> B.ByteString -> B.ByteString
+-- decipher ciphertext dictionary = 
+
 -- Source: https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
 egcd :: Integer -> Integer -> (Integer, Integer, Integer)
 egcd 0 b = (b, 0, 1)
 egcd a b = let (d, s, t) = egcd (b `mod` a) a
            in (d, t - (b `div` a) * s, s)
 
+usage :: IO ()
+usage = putStrLn "usage: affine (encrypt|decrypt|decipher) inFile outFile (a b|dictfile)"
+
+exit = exitWith ExitSuccess
+die  = exitWith $ ExitFailure 1
+
 main :: IO ()
 main = do
   args <- getArgs
-  input <- C.readFile $ head (tail args)
-  let mode = head args
-  case mode of "encrypt"  -> C.writeFile output $ encrypt input a b
-                                 where output =  head $ tail (tail args)
-                                       a = read $ last (init args) :: Integer
-                                       b = read $ last args :: Integer
-               "decrypt"  -> C.writeFile output $ decrypt input a b
-                                 where output =  head $ tail (tail args)
-                                       a = read $ last (init args) :: Integer
-                                       b = read $ last args :: Integer
-               "decipher" -> putStrLn "H"
-               _ -> putStrLn usage
+
+  let mode:inFile:outFile:deps = args
+  input <- C.readFile inFile
+
+  case mode of
+    "encrypt" -> C.writeFile outFile $ encrypt input a b
+                    where a = read $ head deps :: Integer
+                          b = read $ last deps :: Integer
+    "decrypt" -> C.writeFile outFile $ decrypt input a b
+                   where a = read $ head deps :: Integer
+                         b = read $ last deps :: Integer
+    -- "decipher" -> C.writeFile outFile $ decipher input dict
+    --                 where dict = head deps 
+    otherwise -> usage
