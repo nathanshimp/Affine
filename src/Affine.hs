@@ -4,46 +4,51 @@ import Data.Ord
 import Data.List
 import System.Exit
 import System.Environment
-import qualified Data.Map as Map
+import qualified Data.HashMap.Lazy as H
 import qualified Data.ByteString.Lazy as B
-import qualified Data.ByteString.Lazy.Char8 as C
 
 tsnd :: (a, b, c) -> b
 tsnd (_, x, _) = x
 
-encrypt :: B.ByteString -> Integer -> Integer -> B.ByteString
+encrypt :: B.ByteString -> Int -> Int -> B.ByteString
 encrypt plaintext a b = 
   B.pack $ map (\x -> (a' * x + b') `mod` 128) (B.unpack plaintext)
     where a' = fromIntegral a
           b' = fromIntegral b
 
-decrypt :: B.ByteString -> Integer -> Integer -> B.ByteString
+decrypt :: B.ByteString -> Int -> Int -> B.ByteString
 decrypt ciphertext a b =
   B.pack $ map (\x -> (a' * (x - b')) `mod` 128) (B.unpack ciphertext)
     where a' = fromIntegral $ tsnd (egcd a 128)
           b' = fromIntegral b
 
-generateMultipliers :: Integer -> [Integer]
+generateMultipliers :: Int -> [Int]
 generateMultipliers n = filter (\x -> gcd x n == 1) [1..n]
 
-buildDictionary :: B.ByteString -> Map.Map B.ByteString Integer
+dropBadDeciphers :: B.ByteString -> [([B.ByteString], Int)] -> [([B.ByteString], Int)]
+dropBadDeciphers ciphertext possibleCiphers =
+  dropWhile (\(x, y) -> y < pl) possibleCiphers 
+    where pl = length (B.unpack ciphertext) `div` 6
+
+buildDictionary :: B.ByteString -> H.HashMap B.ByteString Int
 buildDictionary dictionary = do
   let d = B.split 10 dictionary -- split by new lines '\n'
-  Map.fromList $ zip d (take (length d) (repeat 0))
+  H.fromList $ zip d (take (length d) (repeat 0))
 
-countWords :: Map.Map B.ByteString Integer -> [B.ByteString] -> Integer
-countWords dictionary []   = sum $ Map.elems dictionary
+countWords :: H.HashMap B.ByteString Int -> [B.ByteString] -> Int
+countWords dictionary []   = sum $ H.elems dictionary
 countWords dictionary text = 
   let word:words = text
-  in countWords (Map.update (\x -> Just (x + 1)) word dictionary) words
+  in countWords (H.update (\x -> Just (x + 1)) word dictionary) words
 
--- decipher :: B.ByteString -> FilePath -> Maybe B.ByteString
+decipher :: B.ByteString -> FilePath -> IO B.ByteString
 decipher ciphertext dictionaryPath = do
-  dict <- C.readFile dictionaryPath
+  dict <- B.readFile dictionaryPath
   let dictMap = buildDictionary dict
   let possibleDeciphers = map (B.split 32) (deciphers ciphertext)
-  let rankedDeciphers = dropWhile (\(x, y) -> y < 10) $ zip possibleDeciphers $ map (countWords dictMap) possibleDeciphers
-  let bestDecipher = fst $ maximumBy (comparing snd) rankedDeciphers
+  let wordCount = map (countWords dictMap) possibleDeciphers
+  let rankedDeciphers = zip wordCount possibleDeciphers
+  let bestDecipher = snd $ maximum rankedDeciphers
   return $ B.intercalate (B.pack [32]) bestDecipher
   
 deciphers :: B.ByteString -> [B.ByteString]
@@ -52,7 +57,7 @@ deciphers ciphertext =
 
 -- Source: https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
 -- Modified by Nate Shimp
-egcd :: Integer -> Integer -> (Integer, Integer, Integer)
+egcd :: Int -> Int -> (Int, Int, Int)
 egcd 0 b = (b, 0, 1)
 egcd a b = let (d, s, t) = egcd (b `mod` a) a
            in (d, t - (b `div` a) * s, s)
@@ -68,15 +73,15 @@ main = do
   args <- getArgs
 
   let mode:inFile:outFile:deps = args
-  input <- C.readFile inFile
+  input <- B.readFile inFile
 
   case mode of
-    "encrypt" -> C.writeFile outFile $ encrypt input a b
-                    where a = read $ head deps :: Integer
-                          b = read $ last deps :: Integer
-    "decrypt" -> C.writeFile outFile $ decrypt input a b
-                   where a = read $ head deps :: Integer
-                         b = read $ last deps :: Integer
-    "decipher" -> decipher input dict >>= C.writeFile outFile
+    "encrypt" -> B.writeFile outFile $ encrypt input a b
+                    where a = read $ head deps :: Int
+                          b = read $ last deps :: Int
+    "decrypt" -> B.writeFile outFile $ decrypt input a b
+                   where a = read $ head deps :: Int
+                         b = read $ last deps :: Int
+    "decipher" -> decipher input dict >>= B.writeFile outFile
                     where dict = head deps
     otherwise -> usage
