@@ -43,7 +43,7 @@ buildDictionary :: B.ByteString -> M.HashMap B.ByteString Int
 buildDictionary dictionary = do
   let words = B.split '\n' dictionary
   M.fromList $ zip words (take (length words) (repeat 0))
-
+  
 countWords :: M.HashMap B.ByteString Int -> [B.ByteString] -> Int
 countWords dictionary words = 
   let hits = map ((flip M.member) dictionary) words
@@ -83,17 +83,28 @@ egcd a b = let (d, s, t) = egcd (b `mod` a) a
 usage :: IO ()
 usage = putStrLn "usage: affine (encrypt|decrypt|decipher) input output (a b|dictionary)"
 
+invalidKeyPair :: String -> String -> IO ()
+invalidKeyPair a b = putStrLn $ "The key pair ("
+                      ++ a ++ ", " ++ b
+                      ++ ") is invalid, please select another key."
+
 parseDispatch :: [String] -> IO ()
 parseDispatch ["encrypt", inFile, outFile, x, y] = do
   input <- B.readFile inFile
-  B.writeFile outFile $ encrypt input a b
-    where a = read x :: Int
-          b = read y :: Int
+  if gcd a 128 == 1 then
+    B.writeFile outFile $ encrypt input a b
+  else
+    invalidKeyPair x y
+  where a = read x :: Int
+        b = read y :: Int
 parseDispatch ["decrypt", inFile, outFile, x, y] = do
   input <- B.readFile inFile
-  B.writeFile outFile $ decrypt input a b
-    where a = read x :: Int
-          b = read y :: Int
+  if gcd a 128 == 1 then
+    B.writeFile outFile $ decrypt input a b
+  else
+    invalidKeyPair x y
+  where a = read x :: Int
+        b = read y :: Int
 parseDispatch ["decipher", inFile, outFile, dictFile] = do
   input <- B.readFile inFile
   decipher input dictFile >>= writeFile outFile

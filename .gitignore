@@ -1,5 +1,6 @@
 *.o
 *.hi
 *.txt
-bin/
-src/affine
+data/
+affine
+
