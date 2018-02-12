@@ -6,73 +6,74 @@ module Main where
 import Data.Ord
 import Data.Char
 import Data.List
+import Data.Word
 import Data.List.Split
-import System.Exit
 import System.Environment
 import qualified Data.HashMap.Lazy as M
+import qualified Data.ByteString.Lazy.Char8 as B
 
 -- Simple Triple functions
-tfst :: (a, b, c) -> a
-tfst (x, _, _) = x
+first :: (a, b, c) -> a
+first (x, _, _) = x
 
-tsnd :: (a, b, c) -> b
-tsnd (_, x, _) = x
+second :: (a, b, c) -> b
+second (_, y, _) = y
 
-ttrd :: (a, b, c) -> c
-ttrd (_, _, x) = x
-
+third :: (a, b, c) -> c
+third (_, _, z) = z
+    
 shift :: Int -> Int -> Char -> Char
 shift a b x = chr $ (a * x' + b) `mod` 128
   where x' = ord x
 
 unshift :: Int -> Int -> Char -> Char
 unshift a b x = chr $ a' * (x' - b) `mod` 128
-  where a' = tsnd (egcd a 128)
+  where a' = second (egcd a 128)
         x' = ord x
 
-encrypt :: String -> Int -> Int -> String
+encrypt :: B.ByteString -> Int -> Int -> B.ByteString
 encrypt plaintext a b = 
-  map (shift a b) plaintext
+  B.pack $ map (shift a b) $ B.unpack plaintext
 
-decrypt :: String -> Int -> Int -> String
+decrypt :: B.ByteString -> Int -> Int -> B.ByteString
 decrypt ciphertext a b =
-  map (unshift a b) ciphertext
+  B.pack $ map (unshift a b) $ B.unpack ciphertext
 
 generateMultipliers :: Int -> [Int]
 generateMultipliers n = filter (\x -> gcd x n == 1) [1..n]
 
-buildDictionary :: String -> M.HashMap String Int
+buildDictionary :: B.ByteString -> M.HashMap B.ByteString Int
 buildDictionary dictionary = do
-  let words = lines dictionary
+  let words = B.split '\n' dictionary
   M.fromList $ zip words (take (length words) (repeat 0))
 
-countWords :: M.HashMap String Int -> [String] -> Int
+countWords :: M.HashMap B.ByteString Int -> [B.ByteString] -> Int
 countWords dictionary words = 
   let hits = map ((flip M.member) dictionary) words
   in  length $ filter id hits 
 
-deciphers :: String -> [(String, Int, Int)]
+deciphers :: B.ByteString -> [(B.ByteString, Int, Int)]
 deciphers ciphertext =
   let multipliers = generateMultipliers 128
   in [((decrypt ciphertext a b), a, b) | a <- multipliers, b <- [0..127]]
 
-showDecipher :: (String, Int, Int) -> String
-showDecipher decipher = (show . tsnd) decipher
+showDecipher :: (B.ByteString, Int, Int) -> String
+showDecipher decipher = (show . second) decipher
                           ++ " "
-                          ++ (show . ttrd) decipher
+                          ++ (show . third) decipher
                           ++ "\n"
                           ++ "DECRYPTED MESSAGE: \n"
-                          ++ tfst decipher
+                          ++ (B.unpack . first) decipher
 
-decipher :: String -> FilePath -> IO String
+decipher :: B.ByteString -> FilePath -> IO String
 decipher ciphertext dictionaryPath = do
-  dict <- readFile dictionaryPath
-  let dictMap           = buildDictionary dict
-  let possibleDeciphers = deciphers ciphertext
-  let usableDeciphers   = map (splitOn " " . tfst) possibleDeciphers
-  let wordCount         = map (countWords dictMap) usableDeciphers
-  let rankedDeciphers   = zip wordCount possibleDeciphers
-  let bestDecipher      = snd $ maximum rankedDeciphers
+  dict <- B.readFile dictionaryPath
+  let dictMap              = buildDictionary dict
+  let possibleDeciphers    = deciphers ciphertext
+  let countableDeciphers   = map (B.split ' ' . first) possibleDeciphers
+  let wordCount            = map (countWords dictMap) countableDeciphers
+  let rankedDeciphers      = zip wordCount possibleDeciphers
+  let bestDecipher         = snd $ maximum rankedDeciphers
   return $ showDecipher bestDecipher
 
 -- Source: https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
@@ -87,17 +88,17 @@ usage = putStrLn "usage: affine (encrypt|decrypt|decipher) input output (a b|dic
 
 parseDispatch :: [String] -> IO ()
 parseDispatch ["encrypt", inFile, outFile, x, y] = do
-  input <- readFile inFile
-  writeFile outFile $ encrypt input a b
+  input <- B.readFile inFile
+  B.writeFile outFile $ encrypt input a b
     where a = read x :: Int
           b = read y :: Int
 parseDispatch ["decrypt", inFile, outFile, x, y] = do
-  input <- readFile inFile
-  writeFile outFile $ decrypt input a b
+  input <- B.readFile inFile
+  B.writeFile outFile $ decrypt input a b
     where a = read x :: Int
           b = read y :: Int
 parseDispatch ["decipher", inFile, outFile, dictFile] = do
-  input <- readFile inFile
+  input <- B.readFile inFile
   decipher input dictFile >>= writeFile outFile
 parseDispatch _ = usage
 
