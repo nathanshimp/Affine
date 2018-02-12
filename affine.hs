@@ -43,11 +43,15 @@ buildDictionary :: B.ByteString -> M.HashMap B.ByteString Int
 buildDictionary dictionary = do
   let words = B.split '\n' dictionary
   M.fromList $ zip words (take (length words) (repeat 0))
+
+lowcase :: B.ByteString -> B.ByteString
+lowcase bstring = B.map toLower bstring
   
 countWords :: M.HashMap B.ByteString Int -> [B.ByteString] -> Int
 countWords dictionary words = 
-  let hits = map ((flip M.member) dictionary) words
+  let hits = map ((flip M.member) dictionary) lowWords
   in  length $ filter id hits 
+  where lowWords = map lowcase words
 
 deciphers :: B.ByteString -> [(B.ByteString, Int, Int)]
 deciphers ciphertext =
