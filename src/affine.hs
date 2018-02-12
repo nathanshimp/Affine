@@ -5,9 +5,6 @@ module Main where
 
 import Data.Ord
 import Data.Char
-import Data.List
-import Data.Word
-import Data.List.Split
 import System.Environment
 import qualified Data.HashMap.Lazy as M
 import qualified Data.ByteString.Lazy.Char8 as B
