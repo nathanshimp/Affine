@@ -3,11 +3,11 @@
 Affine is written in Haskell. To build the executable from source you will need
 to install GHC and cabal-install, to compile and handle build dependencies respectively.
 
-Once you've downloaded the pa1.zip file, extract its contents and change your
-working directory to pa1.
+Once you've downloaded the Affine.zip file, extract its contents and change your
+working directory to Affine.
 
-	unzip pa1.zip
-	cd pa1
+	unzip Affine.zip
+	cd Affine
 
 The easiest way to build and run Affine is with a cabal sandbox. A sandbox
 makes it possible to isolate your project files from your cabal package directory.
