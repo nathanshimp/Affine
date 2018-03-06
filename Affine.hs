@@ -1,6 +1,6 @@
--- Nate Shimp <shimpjn@dukes.jmu.edu>
+-- Nate Shimp <shimpjn@protonmail.com>
 --
--- File: affine.hs
+-- File: Affine.hs
 module Main where
 
 import Data.Ord
@@ -18,7 +18,7 @@ second (_, y, _) = y
 
 third :: (a, b, c) -> c
 third (_, _, z) = z
-    
+
 shift :: Int -> Int -> Char -> Char
 shift a b x = chr $ (a * x' + b) `mod` 128
   where x' = ord x
@@ -28,21 +28,21 @@ unshift a b x = chr $ a' * (x' - b) `mod` 128
   where a' = second (egcd a 128)
         x' = ord x
 
-encrypt :: B.ByteString -> Int -> Int -> B.ByteString
-encrypt plaintext a b = 
+encrypt :: Int -> Int -> B.ByteString -> B.ByteString
+encrypt a b plaintext = 
   B.pack $ map (shift a b) $ B.unpack plaintext
 
-decrypt :: B.ByteString -> Int -> Int -> B.ByteString
-decrypt ciphertext a b =
+decrypt :: Int -> Int -> B.ByteString -> B.ByteString
+decrypt a b ciphertext =
   B.pack $ map (unshift a b) $ B.unpack ciphertext
 
 generateMultipliers :: Int -> [Int]
 generateMultipliers n = filter (\x -> gcd x n == 1) [1..n]
 
 buildDictionary :: B.ByteString -> M.HashMap B.ByteString Int
-buildDictionary dictionary = do
+buildDictionary dictionary =
   let words = B.split '\n' dictionary
-  M.fromList $ zip words (take (length words) (repeat 0))
+  in M.fromList $ zip words (take (length words) (repeat 0))
 
 lowcase :: B.ByteString -> B.ByteString
 lowcase bstring = B.map toLower bstring
@@ -56,26 +56,23 @@ countWords dictionary words =
 deciphers :: B.ByteString -> [(B.ByteString, Int, Int)]
 deciphers ciphertext =
   let multipliers = generateMultipliers 128
-  in [((decrypt ciphertext a b), a, b) | a <- multipliers, b <- [0..127]]
+  in [((decrypt a b ciphertext), a, b) | a <- multipliers, b <- [0..127]]
 
-showDecipher :: (B.ByteString, Int, Int) -> String
-showDecipher decipher = (show . second) decipher
-                          ++ " "
-                          ++ (show . third) decipher
-                          ++ "\n"
-                          ++ "DECRYPTED MESSAGE: \n"
-                          ++ (B.unpack . first) decipher
+showDecipher :: (B.ByteString, Int, Int) -> B.ByteString
+showDecipher decipher = B.concat [a, (B.singleton ' '), b,
+                                  (B.pack "\nDECRYPTED MESSAGE: \n"), (first decipher)]
+                                  where a = (B.singleton . chr . second) decipher
+                                        b = (B.singleton . chr . third) decipher
 
-decipher :: B.ByteString -> FilePath -> IO String
-decipher ciphertext dictionaryPath = do
-  dict <- B.readFile dictionaryPath
-  let dictMap              = buildDictionary dict
-  let possibleDeciphers    = deciphers ciphertext
-  let countableDeciphers   = map (B.split ' ' . first) possibleDeciphers
-  let wordCount            = map (countWords dictMap) countableDeciphers
-  let rankedDeciphers      = zip wordCount possibleDeciphers
-  let bestDecipher         = snd $ maximum rankedDeciphers
-  return $ showDecipher bestDecipher
+decipher :: B.ByteString -> B.ByteString -> B.ByteString
+decipher dictionary ciphertext =
+  let dictMap              = buildDictionary dictionary
+      possibleDeciphers    = deciphers ciphertext
+      countableDeciphers   = map (B.split ' ' . first) possibleDeciphers
+      wordCount            = map (countWords dictMap) countableDeciphers
+      rankedDeciphers      = zip wordCount possibleDeciphers
+      bestDecipher         = snd $ maximum rankedDeciphers
+  in showDecipher bestDecipher
 
 -- Source: https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
 -- Modified by Nate Shimp <shimpjn@dukes.jmu.edu>
@@ -88,33 +85,29 @@ usage :: IO ()
 usage = putStrLn "usage: affine (encrypt|decrypt|decipher) input output (a b|dictionary)"
 
 invalidKeyPair :: String -> String -> IO ()
-invalidKeyPair a b = putStrLn $ "The key pair ("
-                      ++ a ++ ", " ++ b
+invalidKeyPair a b = putStrLn $ "The key pair (" ++ a ++ ", " ++ b
                       ++ ") is invalid, please select another key."
 
 parseDispatch :: [String] -> IO ()
-parseDispatch ["encrypt", inFile, outFile, x, y] = do
-  input <- B.readFile inFile
+parseDispatch ["encrypt", inFile, outFile, x, y] =
   if gcd a 128 == 1 then
-    B.writeFile outFile $ encrypt input a b
+    B.readFile inFile >>= B.writeFile outFile . encrypt a b
   else
     invalidKeyPair x y
   where a = read x :: Int
         b = read y :: Int
-parseDispatch ["decrypt", inFile, outFile, x, y] = do
-  input <- B.readFile inFile
+parseDispatch ["decrypt", inFile, outFile, x, y] =
   if gcd a 128 == 1 then
-    B.writeFile outFile $ decrypt input a b
+    B.readFile inFile >>= B.writeFile outFile . decrypt a b
   else
     invalidKeyPair x y
   where a = read x :: Int
         b = read y :: Int
 parseDispatch ["decipher", inFile, outFile, dictFile] = do
   input <- B.readFile inFile
-  decipher input dictFile >>= writeFile outFile
+  dict  <- B.readFile dictFile
+  B.writeFile outFile $ decipher dict input
 parseDispatch _ = usage
 
 main :: IO ()
-main = do
-  args <- getArgs
-  parseDispatch args
+main = getArgs >>= parseDispatch
